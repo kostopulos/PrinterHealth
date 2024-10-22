@@ -20,6 +20,8 @@ using PrinterHealth.Model;
 using RavuAlHemio.CentralizedLog;
 
 using System.IO;
+using Newtonsoft.Json.Converters;
+using System.Net.Mail;
 
 namespace OceColorWave6x0HealthModule
 {
@@ -155,6 +157,9 @@ namespace OceColorWave6x0HealthModule
                 Timeout = TimeSpan.FromSeconds(Config.TimeoutSeconds)
             };
             client.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en");
+
+            // prevent error 500 from Canon devices
+            client.DefaultRequestHeaders.ExpectContinue = false;
             return client;
         }
 
@@ -185,6 +190,7 @@ namespace OceColorWave6x0HealthModule
             using (var client = GetNewClient())
             {
                 string docString;
+
                 try
                 {
                     docString = client.GetStringAsync(GetUri(endpoint)).SyncWait();
@@ -193,7 +199,6 @@ namespace OceColorWave6x0HealthModule
                 {
                     throw new TimeoutException("the fetch operation timed out", ae.InnerExceptions[0]);
                 }
-
                 return JsonConvert.DeserializeObject<T>(docString);
             }
         }
@@ -225,11 +230,14 @@ namespace OceColorWave6x0HealthModule
 
             // jobs
             int newJobCount = 0;
-                string sJobListEndpoint = JobListEndpoint;
-                if(Config.Hostname == "ra-plotter1.archlab.tuwien.ac.at" || Config.Hostname == "ra-plotter3.archlab.tuwien.ac.at")
-                {
-                    sJobListEndpoint = "/owt/list_content_json.jsp?url=%2Fv2%2FQueueManager%2Fqueue_list_data.jsp&id=queue&bundle=queuemanager&itemCount=15";
-                }
+            string sJobListEndpoint = JobListEndpoint;
+            Logger.LogDebug($"HostPath={Config.HostPath}");
+            // if a HostPath is set, add it to sJobListEndpoint
+            if (!String.IsNullOrEmpty(Config.HostPath))
+            {
+                string[] endpointArray = sJobListEndpoint.Split(new String[] { "url=" }, StringSplitOptions.None);
+                sJobListEndpoint = endpointArray[0] + "url=" + Uri.EscapeDataString(Config.HostPath) + endpointArray[1];
+            }
             var jobsJson = FetchJson<JObject>(sJobListEndpoint);
             var jobsJsonBody = jobsJson["body"] as JObject;
             if (jobsJsonBody != null)
