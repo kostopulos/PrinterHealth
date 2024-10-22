@@ -196,3 +196,6 @@ ModelManifest.xml
 
 # ready-to-use NuGet packages
 *.nupkg
+
+# vs
+.vs/
